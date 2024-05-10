@@ -1,0 +1,68 @@
+import nltk
+nltk.download('wordnet')
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('omw-1.4')
+import numpy as np
+import pandas as pd
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem.wordnet import WordNetLemmatizer
+from ast import literal_eval
+data=pd.read_csv("C:\\Users\\DELL\\Desktop\\projects file\\Hotel_Reviews.csv")
+data.head()
+data.Hotel_Address = data.Hotel_Address.str.replace("United Kingdom", "UK")
+data['country'] = data.Hotel_Address.apply(lambda x: x.split(' ')[-1])
+# Drop unnecessary columns from the dataset
+columns_to_drop = ['Additional_Number_of_Scoring', 'Review_Date', 'Reviewer_Nationality', 'Negative_Review',
+                   'Review_Total_Negative_Word_Counts', 'Total_Number_of_Reviews', 'Positive_Review',
+                   'Review_Total_Positive_Word_Counts', 'Total_Number_of_Reviews_Reviewer_Has_Given',
+                   'Reviewer_Score', 'days_since_review', 'lat', 'lng']
+data.drop(columns_to_drop, axis=1, inplace=True)
+# Function to correct the format of Tags column
+def correction(string):
+    string = string[0]
+    if type(string) != list:
+        return "".join(literal_eval(string))
+    else:
+        return string
+data['Tags'] = data[["Tags"]].apply(correction, axis=1)
+# Convert country and Tags columns to lowercase
+data['country'] = data['country'].str.lower()
+data['Tags'] = data['Tags'].str.lower()
+# Function to recommend hotels based on location and description
+def recommend_hotel(location, description):
+    description = description.lower()
+    word_tokenize(description)
+    stop_words = stopwords.words('english')
+    lemmatizer = WordNetLemmatizer()
+    filtered = {word for word in description if word not in stop_words}
+    filtered_set = set()
+    for fs in filtered:
+        filtered_set.add(lemmatizer.lemmatize(fs))
+    
+    country = data[data['country'] == location.lower()]
+    country = country.set_index(np.arange(country.shape[0]))
+    list1 = []; list2 = []; cos = [];
+    
+    for i in range(country.shape[0]):
+        temp_token = word_tokenize(country["Tags"][i])
+        temp_set = [word for word in temp_token if word not in stop_words]
+        temp2_set = set()
+        for s in temp_set:
+            temp2_set.add(lemmatizer.lemmatize(s))
+        vector = temp2_set.intersection(filtered_set)
+        cos.append(len(vector))
+    country['similarity'] = cos
+    country = country.sort_values(by='similarity', ascending=False)
+    country.drop_duplicates(subset='Hotel_Name', keep='first', inplace=True)
+    country.sort_values('Average_Score', ascending=False, inplace=True)
+    country.reset_index(inplace=True)
+    return country[["Hotel_Name", "Average_Score", "Hotel_Address"]].head(5)
+# Function to run the hotel recommendation system
+def run():
+    country = input("Which country are you going to stay in?\t:")
+    description = input("Describe your purpose of visiting and how long you are planning to stay there:\t:")
+    return recommend_hotel(country, description)
+pd.set_option('display.max_colwidth', None)  # Display full text in DataFrame output
+run()  # Execute the recommendation system
